@@ -1,0 +1,72 @@
+# What you want the agent to achieve and who it should look for.
+goal: "Get 5 qualified discovery calls per month with operations leaders at small logistics companies"
+audience: "Operations managers and founders at logistics and freight companies with 10-200 employees"
+
+product:
+  name: "YourProduct"
+  url: "https://example.com"
+  description: "One or two plain sentences on what it does and for whom."
+  pitch: "The core value in one sentence, written the way you would say it to a friend."
+  proofPoints:            # only real, verifiable results. The agent never invents any beyond these.
+    - "Example: cut manual dispatch time by 30% for a 40-truck fleet"
+  callToAction: "Open to a 15-minute call next week?"
+
+sender:
+  name: "Your Name"
+  title: "Founder, YourProduct"
+  # Appended to every email. Add your postal address here if your jurisdiction requires it (CAN-SPAM).
+  footer: 'If this is not relevant, just reply "no thanks" and I will not contact you again.'
+
+discovery:
+  batchSize: 8
+  hints:                  # optional search strategies (dorking-style); the agent adapts them
+    - 'site:linkedin.com/company "logistics" "operations manager" (use only for finding company names)'
+    - 'recent news: logistics company expansion, new warehouse, funding'
+    - 'trade association member directories and conference speaker lists'
+
+# Each role is an ordered fallback list. If the first model hits its quota, the next is used.
+# Ids unavailable to your API key are ignored at startup; if none remain, the newest usable models are picked automatically.
+models:
+  fast: [gemini-3.8-flash, gemini-2.5-flash]   # discovery, research, classification, exploring
+  smart: [gemini-3.8-flash, gemini-2.5-pro]    # drafting and review: put your best model first
+
+llm:
+  requestsPerMinute: 8      # shared budget across all stages; keep below your API key's limit
+
+# Daily snapshot of the database. Point this at a Google Drive for desktop folder to use your 5 TB.
+# Never put the live database in a synced folder (data/ stays local); only these copies go there.
+backup:
+  dir: ""                   # e.g. "~/Google Drive/outreach-backups" (use the full path). Empty = off
+  everyHours: 24
+  keep: 14
+
+quality:
+  minFit: 6
+  minCriticScore: 7
+  maxRevisions: 2
+  settleDays: 7             # days without a reply before an email counts as a "loss" for learning
+
+sending:
+  startPerDay: 10           # warm-up: starts here, ramps up daily
+  rampPerDay: 2
+  maxPerDay: 40
+  hours: [9, 17]            # send window, 24h clock, in `timezone`
+  weekdaysOnly: true
+  # timezone: America/New_York   # defaults to this machine's timezone; set to your recipients' timezone
+  minGapMinutes: 4
+  maxGapMinutes: 12
+
+channels:
+  email:
+    from: "Your Name <you@yourdomain.com>"
+    # Gmail: smtp.gmail.com / imap.gmail.com with an app password. Outlook: smtp.office365.com / outlook.office365.com
+    smtp: { host: smtp.gmail.com, port: 465, secure: true }
+    imap: { host: imap.gmail.com, port: 993, secure: true }
+
+notifiers: [telegram]      # any of: telegram, webhook (Slack/Discord/ntfy-compatible)
+
+explorer:
+  intervalHours: 24
+  subreddits: [sales, coldemail, Entrepreneur]
+  queries: ["cold email that got replies", "outreach personalization"]
+  knowledgeDir: knowledge   # drop .pdf / .txt / .md books and notes here. PDFs are read once, whole, by Gemini (max 18 MB each). Can be a Drive-synced folder.

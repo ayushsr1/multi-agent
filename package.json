@@ -1,0 +1,35 @@
+{
+  "name": "outreach-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dry-run": "tsx src/index.ts --dry-run",
+    "live": "tsx src/index.ts --live",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^3.0.0",
+    "better-sqlite3": "^13.0.3",
+    "cheerio": "^1.2.0",
+    "dotenv": "^18.0.10",
+    "imapflow": "^2.11.0",
+    "mailparser": "^3.14.3",
+    "nodemailer": "^10.5.0",
+    "puppeteer": "^24.43.1",
+    "yaml": "^2.9.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/mailparser": "^3.9.0",
+    "@types/node": "^26.6.6",
+    "@types/nodemailer": "^8.0.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

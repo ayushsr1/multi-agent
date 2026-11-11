@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Outreach Agent</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header>
+    <h1>Outreach Agent</h1>
+    <span id="pill" class="pill">Loading…</span>
+    <nav>
+      <button id="tab-dashboard" class="tab active" data-tab="dashboard">Dashboard</button>
+      <button id="tab-settings" class="tab" data-tab="settings">Settings</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="view-dashboard">
+      <div class="card">
+        <div class="row">
+          <button id="btn-dry" class="btn">Start practice run</button>
+          <button id="btn-live" class="btn primary">Start for real</button>
+          <button id="btn-stop" class="btn danger">Stop</button>
+        </div>
+        <p class="muted">A practice run does everything except send: it finds people and writes emails so you can read them here first. Nothing leaves your computer.</p>
+        <p id="agent-msg" class="msg" hidden></p>
+        <ul id="ready" class="checks"></ul>
+      </div>
+
+      <div class="row spread">
+        <h2>Results</h2>
+        <label class="inline">Showing
+          <select id="dataset">
+            <option value="live">real run</option>
+            <option value="dry">practice run</option>
+          </select>
+        </label>
+      </div>
+      <div id="cards" class="cards"></div>
+
+      <div class="card"><h3>Replies to you</h3><div id="replies"></div></div>
+      <div class="card"><h3>What the agent has learned</h3><p class="muted">It tries different email approaches and shifts toward the ones that get replies.</p><div id="angles"></div></div>
+      <div class="card"><h3>Pipeline</h3><div id="funnel"></div></div>
+      <div class="card"><h3>Recent emails</h3><div id="emails"></div></div>
+      <div class="card"><h3>People found</h3><div id="leads"></div></div>
+      <div class="card"><h3>Activity</h3><pre id="log" class="log"></pre></div>
+    </section>
+
+    <section id="view-settings" hidden>
+      <p id="welcome" class="card note" hidden>Welcome. Fill in the sections below, press each Test button, then click Save at the bottom. Nothing is sent until you start a real run on the Dashboard.</p>
+      <form id="form" autocomplete="off"></form>
+      <p id="banner" class="msg" hidden></p>
+      <div class="savebar"><button id="btn-save" class="btn primary" type="button">Save settings</button></div>
+    </section>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>
