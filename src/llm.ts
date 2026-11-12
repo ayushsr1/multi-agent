@@ -32,7 +32,8 @@ let nextSlot = 0;
 const cooldown = new Map<string, number>();
 
 export function initLlm(apiKey: string, requestsPerMinute: number) {
-  ai = new GoogleGenAI({ apiKey });
+  // generate() does its own retry and model fallback; the SDK's hidden retries would only add minutes of waiting.
+  ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: 180_000, retryOptions: { attempts: 1 } } });
   minGapMs = Math.ceil(60_000 / Math.max(1, requestsPerMinute));
 }
 

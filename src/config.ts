@@ -14,13 +14,13 @@ const dirSetting = (def: string) =>
     .default(def)
     .transform((v) => v.replace(/^~(?=$|[\\/])/, os.homedir()));
 /** A single model id or an ordered fallback list. */
-const modelChain = (def: string[], legacy: string[] = []) =>
+const modelChain = (def: string[]) =>
   z
     .union([z.string(), z.array(z.string()).min(1)])
     .default(def)
     .transform((v) => (Array.isArray(v) ? v : [v]))
-    // Saved settings that still hold the old shipped list get the current defaults.
-    .transform((v) => (v.join() === legacy.join() ? def : v));
+    // Google retired Gemini 1.x/2.x for new keys: drop them from saved settings and keep current fallbacks behind the user's choice.
+    .transform((v) => [...new Set([...v.filter((m) => !/^gemini-[12]\./.test(m)), ...def])]);
 
 const schema = z.object({
   goal: z.string().min(10),
@@ -48,8 +48,8 @@ const schema = z.object({
     .default({}),
   models: z
     .object({
-      fast: modelChain(['gemini-3.8-flash', 'gemini-2.5-flash'], ['gemini-2.5-flash', 'gemini-2.5-flash-lite']),
-      smart: modelChain(['gemini-3.8-flash', 'gemini-2.5-pro'], ['gemini-2.5-pro', 'gemini-2.5-flash']),
+      fast: modelChain(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash']),
+      smart: modelChain(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash']),
     })
     .default({}),
   llm: z

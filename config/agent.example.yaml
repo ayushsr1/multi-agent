@@ -27,8 +27,8 @@ discovery:
 # Each role is an ordered fallback list. If the first model hits its quota, the next is used.
 # Ids unavailable to your API key are ignored at startup; if none remain, the newest usable models are picked automatically.
 models:
-  fast: [gemini-3.8-flash, gemini-2.5-flash]   # discovery, research, classification, exploring
-  smart: [gemini-3.8-flash, gemini-2.5-pro]    # drafting and review: put your best model first
+  fast: [gemini-3.8-flash, gemini-3.7-flash, gemini-3.5-flash]    # discovery, research, classification, exploring
+  smart: [gemini-3.8-flash, gemini-3.7-flash, gemini-3.6-flash]   # drafting and review: put your best model first
 
 llm:
   requestsPerMinute: 8      # shared budget across all stages; keep below your API key's limit
