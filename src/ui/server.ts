@@ -155,6 +155,13 @@ const routes: Record<string, Handler> = {
     const present = wanted.filter((m) => models.includes(m));
     if (!present.length) wanted.push(...autoPick(models, false), ...autoPick(models, true));
     const probes = await probeModels(key, [...new Set(wanted)]);
+    if (!probes.some((p) => p.ok)) {
+      // Newest models are often overloaded (503/504). Try older stable ones so the test shows the key itself works.
+      const tried = new Set(probes.map((p) => p.model));
+      const preferred = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+      const older = preferred.filter((n) => models.includes(n) && !tried.has(n));
+      if (older.length) probes.push(...(await probeModels(key, older)));
+    }
     return { ok: probes.some((p) => p.ok), models, missing: [...new Set(missing)], probes };
   },
 
