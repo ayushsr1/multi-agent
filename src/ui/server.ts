@@ -144,7 +144,7 @@ const routes: Record<string, Handler> = {
     } catch (e) {
       const msg = errMsg(e);
       // A network failure is not a bad key: say which it is.
-      if (/fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|timed? ?out|proxy/i.test(msg)) {
+      if (/fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|timed? ?out|abort|proxy/i.test(msg)) {
         throw new HttpError(400, 'Could not reach Google from this computer, so the key was NOT checked. This is a network or company-proxy block, not a problem with your key.');
       }
       throw new HttpError(400, `Google rejected the key: ${msg}`);
