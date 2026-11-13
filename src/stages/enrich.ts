@@ -4,11 +4,11 @@ import { fetchPage } from '../browser.js';
 import { isSuppressed, setLead, type LeadRow } from '../db.js';
 import { errMsg, log, trunc } from '../util.js';
 
-const JUNK_LOCAL = /^(noreply|no-reply|donotreply|do-not-reply|abuse|privacy|legal|postmaster|webmaster|careers|jobs|press|unsubscribe|mailer-daemon)$/i;
-const JUNK_DOMAIN = /(^|\.)(example\.com|sentry\.io|wixpress\.com|sentry-next\.wixpress\.com)$/i;
-const FILE_EXT = /\.(png|jpe?g|gif|svg|webp|css|js|woff2?)$/i;
+export const JUNK_LOCAL = /^(noreply|no-reply|donotreply|do-not-reply|abuse|privacy|legal|postmaster|webmaster|careers|jobs|press|unsubscribe|mailer-daemon)$/i;
+export const JUNK_DOMAIN = /(^|\.)(example\.com|sentry\.io|wixpress\.com|sentry-next\.wixpress\.com)$/i;
+export const FILE_EXT = /\.(png|jpe?g|gif|svg|webp|css|js|woff2?)$/i;
 const ROLE_BASED = /^(info|hello|hi|hey|contact|team|sales|office|enquiries|inquiries|general)$/i;
-const CONTACT_LINK = /contact|about|team|people|leadership|company|who-we-are/i;
+export const CONTACT_LINK = /contact|about|team|people|leadership|company|who-we-are/i;
 
 function score(email: string, lead: LeadRow, siteHost: string): number {
   const [local, domain] = email.split('@');
@@ -22,7 +22,7 @@ function score(email: string, lead: LeadRow, siteHost: string): number {
   return s;
 }
 
-async function hasMx(domain: string): Promise<boolean> {
+export async function hasMx(domain: string): Promise<boolean> {
   try {
     return (await dns.resolveMx(domain)).length > 0;
   } catch {

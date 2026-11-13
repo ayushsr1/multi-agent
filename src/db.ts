@@ -104,6 +104,9 @@ export function openDb(file: string): DB {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+  if (!(db.prepare(`PRAGMA table_info(leads)`).all() as { name: string }[]).some((c) => c.name === 'phone')) {
+    db.exec(`ALTER TABLE leads ADD COLUMN phone TEXT`);
+  }
   const ins = db.prepare(
     `INSERT OR IGNORE INTO angles (id, description, source, active, created_at) VALUES (?, ?, 'seed', 1, ?)`,
   );

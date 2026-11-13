@@ -443,14 +443,96 @@ async function refreshLogs() {
   } catch { /* ignore */ }
 }
 
+/* ------------------------------ quick outreach ----------------------------- */
+
+const Q_STATUS = {
+  found: ['Found', ''], queued: ['Waiting to send', 'attn'], sent: ['Emailed', 'good'], replied: ['REPLIED', 'good'],
+  no: ['Said no', 'bad'], bounced: ['Bounced', 'bad'], skipped: ['Skipped (opted out)', 'bad'],
+};
+let qLoaded = false;
+
+function qMsg(text, kind) {
+  const m = $('#q-msg');
+  m.hidden = !text;
+  m.textContent = text || '';
+  m.className = `msg ${kind || ''}`;
+}
+
+const qTemplate = () => ({ subject: $('#q-subject').value, body: $('#q-body').value });
+
+async function refreshQuick() {
+  if (document.hidden || $('#view-quick').hidden) return;
+  let q;
+  try { q = await api('/api/quick'); } catch { return; }
+  if (!qLoaded) {
+    qLoaded = true;
+    $('#q-links').value = q.links.join('\n');
+    $('#q-limit').value = q.limit;
+    $('#q-subject').value = q.subject;
+    $('#q-body').value = q.body;
+  }
+  $('#q-find').disabled = q.finding;
+  $('#q-find').textContent = q.finding ? 'Looking…' : 'Find contacts';
+  $('#q-find-msg').textContent = q.findMsg;
+  $('#q-send').disabled = q.sending;
+  $('#q-stop').disabled = !q.sending && !q.finding;
+  const c = q.counts;
+  const waiting = c.queued || 0;
+  const next = q.sending && waiting ? ` Next email ${q.nextAt > Date.now() ? `in about ${Math.ceil((q.nextAt - Date.now()) / 60000)} min` : 'shortly'}.` : '';
+  $('#q-counts').textContent = `Found ${c.found || 0} · waiting ${waiting} · emailed ${(c.sent || 0) + (c.replied || 0) + (c.no || 0) + (c.bounced || 0)} · replied ${c.replied || 0} · said no ${c.no || 0} · bounced ${c.bounced || 0}.${q.sending ? ' Sending is ON.' : ''}${next}`;
+  $('#q-contacts').replaceChildren(q.contacts.length
+    ? h('table', {},
+      h('tr', {}, ['Company', 'Email', 'Phone', 'Status', ''].map((t) => h('th', { text: t }))),
+      q.contacts.map((r) => {
+        const [label, cls] = Q_STATUS[r.status] || [r.status, ''];
+        return h('tr', {},
+          h('td', {}, h('div', { text: r.company || '' }), h('div', { class: 'muted', text: r.website || r.source || '' })),
+          h('td', { text: r.email || '' }),
+          h('td', { text: r.phone || '' }),
+          h('td', {}, h('span', { class: `badge ${cls}`, text: label }), r.reply ? h('pre', { text: r.reply }) : null),
+          h('td', {}, r.status === 'found' || r.status === 'queued'
+            ? h('button', { class: 'btn', type: 'button', text: 'Remove', onclick: async () => { await api('/api/quick/remove', { id: r.id }).catch(() => {}); refreshQuick(); } })
+            : null));
+      }))
+    : empty('Nobody yet. Paste links above and press Find contacts.'));
+}
+
+async function qAction(fn) {
+  qMsg('');
+  try { await fn(); } catch (e) { qMsg(e.message, 'bad'); }
+  refreshQuick();
+}
+
+$('#q-find').addEventListener('click', () => qAction(async () => {
+  const links = $('#q-links').value.split('\n').map((s) => s.trim()).filter(Boolean);
+  await api('/api/quick/find', { links, limit: Number($('#q-limit').value) });
+}));
+$('#q-test').addEventListener('click', () => qAction(async () => {
+  qMsg('Sending a test…');
+  const r = await api('/api/quick/test', qTemplate());
+  qMsg(`Test sent to ${r.to}. Check that inbox.`, 'ok');
+}));
+$('#q-send').addEventListener('click', () => qAction(async () => {
+  if (!confirm('Send this email to everyone in the list who has not been emailed yet? They go out one at a time, a few minutes apart.')) return;
+  const r = await api('/api/quick/send', { ...qTemplate(), confirm: true });
+  qMsg(`Sending started. ${r.queued} emails will go out, a few minutes apart. You can close this page.`, 'ok');
+}));
+$('#q-stop').addEventListener('click', () => qAction(async () => { await api('/api/quick/stop', {}); qMsg('Stopped.', 'ok'); }));
+$('#q-clear').addEventListener('click', () => qAction(async () => {
+  if (!confirm('Remove everyone who has not been emailed yet from the list?')) return;
+  await api('/api/quick/clear', {});
+}));
+for (const id of ['#q-subject', '#q-body']) $(id).addEventListener('change', () => api('/api/quick/template', qTemplate()).catch(() => {}));
+
 /* ---------------------------------- boot ---------------------------------- */
 
 function showTab(name) {
-  for (const t of ['dashboard', 'settings']) {
+  for (const t of ['quick', 'dashboard', 'settings']) {
     $(`#view-${t}`).hidden = t !== name;
     $(`#tab-${t}`).classList.toggle('active', t === name);
   }
   if (name === 'dashboard') { refreshStats(); refreshStatus(); }
+  if (name === 'quick') refreshQuick();
 }
 
 buildForm();
@@ -464,9 +546,10 @@ $('#dataset').addEventListener('change', refreshStats);
 (async () => {
   const saved = await loadSettings().catch((e) => { banner(e.message, 'bad'); return true; });
   await refreshStatus();
-  if (!saved) { $('#welcome').hidden = false; showTab('settings'); } else showTab('dashboard');
+  if (!saved) { $('#welcome').hidden = false; showTab('settings'); } else showTab('quick');
   setInterval(refreshStatus, 3000);
   setInterval(refreshStats, 6000);
+  setInterval(refreshQuick, 3000);
   setInterval(refreshLogs, 2500);
   refreshLogs();
 })();

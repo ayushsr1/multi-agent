@@ -17,7 +17,7 @@ const BOUNCE = /mailer-daemon|postmaster/i;
 const BOUNCE_SUBJECT = /undeliver|delivery status|delivery failure|failure notice|returned mail|could not be delivered/i;
 
 /** Removes quoted history so the classifier sees only the new reply text. */
-function newText(text: string): string {
+export function newText(text: string): string {
   const cut = text.search(/^\s*(>|On .{5,120} wrote:|-{2,}\s*Original Message)/im);
   return (cut > 0 ? text.slice(0, cut) : text).trim();
 }

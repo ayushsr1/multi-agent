@@ -11,12 +11,46 @@
     <h1>Outreach Agent</h1>
     <span id="pill" class="pill">Loading…</span>
     <nav>
-      <button id="tab-dashboard" class="tab active" data-tab="dashboard">Dashboard</button>
+      <button id="tab-quick" class="tab" data-tab="quick">Quick outreach</button>
+      <button id="tab-dashboard" class="tab active" data-tab="dashboard">AI agent</button>
       <button id="tab-settings" class="tab" data-tab="settings">Settings</button>
     </nav>
   </header>
 
   <main>
+    <section id="view-quick" hidden>
+      <div class="card">
+        <h3>Step 1. Where to look</h3>
+        <label class="field"><span class="lbl">Directory or marketplace links</span>
+          <small>One link per line. The agent reads each page top to bottom, follows company pages and websites, then moves to the next page.</small>
+          <textarea id="q-links" rows="4" placeholder="https://example-directory.com/exporters/textiles"></textarea></label>
+        <label class="field"><span class="lbl">How many new contacts to collect</span>
+          <input id="q-limit" type="number" min="1" max="500" value="20"></label>
+        <div class="row"><button id="q-find" class="btn primary" type="button">Find contacts</button><span id="q-find-msg" class="muted"></span></div>
+      </div>
+
+      <div class="card">
+        <div class="row spread"><h3>Step 2. Check who was found</h3><button id="q-clear" class="btn danger" type="button">Remove all not yet emailed</button></div>
+        <p id="q-counts" class="muted"></p>
+        <div id="q-contacts"></div>
+      </div>
+
+      <div class="card">
+        <h3>Step 3. The email (same for everyone)</h3>
+        <label class="field"><span class="lbl">Subject</span><input id="q-subject" type="text" maxlength="200"></label>
+        <label class="field"><span class="lbl">Message</span>
+          <small>Your name, role and opt-out line from Settings are added at the bottom automatically.</small>
+          <textarea id="q-body" rows="10"></textarea></label>
+        <div class="row">
+          <button id="q-test" class="btn" type="button">Send a test to myself</button>
+          <button id="q-send" class="btn primary" type="button">Send to everyone found</button>
+          <button id="q-stop" class="btn danger" type="button">Stop</button>
+        </div>
+        <p id="q-msg" class="msg" hidden></p>
+        <p class="muted">Emails go out one at a time, a few minutes apart, so your account is not flagged as spam. When someone replies you get a Telegram message. People who say no are never emailed again.</p>
+      </div>
+    </section>
+
     <section id="view-dashboard">
       <div class="card">
         <div class="row">

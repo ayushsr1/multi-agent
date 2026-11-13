@@ -10,6 +10,7 @@ import { loadConfig, NeedsSetup, saveConfig, settingsForForm, type Config } from
 import { envStatus, isEnvKey, setEnv, type EnvKey } from '../env.js';
 import { openDb, type DB } from '../db.js';
 import { autoPick, listUsableModels, probeModels } from '../llm.js';
+import { clearUnsent, quickStatus, removeContact, saveTemplate, sendTest, startFind, startSending, stopQuick } from '../quick.js';
 import { errMsg, log, logsSince } from '../util.js';
 import { collectStats } from './stats.js';
 
@@ -189,7 +190,47 @@ const routes: Record<string, Handler> = {
       throw new HttpError(400, errMsg(e));
     }
   },
+
+  'GET /api/quick': async () => quickStatus(),
+
+  'POST /api/quick/find': async (req) => {
+    const body = await readJson(req);
+    const links = Array.isArray(body.links) ? body.links.map(String) : [];
+    return userError(() => startFind(links, Number(body.limit)));
+  },
+
+  'POST /api/quick/template': async (req) => {
+    const body = await readJson(req);
+    saveTemplate(body.subject, body.body);
+    return { ok: true };
+  },
+
+  'POST /api/quick/test': async (req) => {
+    const body = await readJson(req);
+    return userError(() => sendTest(body.subject, body.body));
+  },
+
+  'POST /api/quick/send': async (req) => {
+    const body = await readJson(req);
+    if (body.confirm !== true) throw new HttpError(400, 'Sending needs confirmation');
+    return userError(() => startSending(body.subject, body.body));
+  },
+
+  'POST /api/quick/stop': async () => (stopQuick(), { ok: true }),
+
+  'POST /api/quick/remove': async (req) => (removeContact((await readJson(req)).id), { ok: true }),
+
+  'POST /api/quick/clear': async () => (clearUnsent(), { ok: true }),
 };
+
+/** Runs an action whose errors are meant for the user (missing settings, bad link, email login failure). */
+async function userError<T>(fn: () => T | Promise<T>): Promise<T | { ok: true }> {
+  try {
+    return (await fn()) ?? { ok: true };
+  } catch (e) {
+    throw new HttpError(400, errMsg(e));
+  }
+}
 
 const sha256 = (s: string) => crypto.createHash('sha256').update(s, 'utf8').digest();
 

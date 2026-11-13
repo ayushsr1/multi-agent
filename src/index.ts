@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { getState, startAgent, stopAgent } from './agent.js';
+import { startQuickLoops } from './quick.js';
 import { startUi } from './ui/server.js';
 import { errMsg, log } from './util.js';
 
@@ -13,6 +14,7 @@ const server = await startUi(port, host).catch((e) => {
   process.exit(1);
 });
 log.info('ui', `Settings and dashboard: ${url}`);
+startQuickLoops();
 
 // Optional auto-start for always-on use (pm2, scheduled task, server): `npm run dry-run` or `npm run live`.
 // AGENT_AUTOSTART=dry|live resumes the agent after a server restart without opening the page.
