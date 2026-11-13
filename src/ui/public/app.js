@@ -298,7 +298,10 @@ async function runTest(btn, out, action) {
       const bad = r.probes.filter((p) => !p.ok);
       const lines = r.probes.map((p) => `${p.model}: ${p.ok ? 'works' : `FAILED. ${p.error}`}`);
       if (bad.length) lines.push(`\nModels your key can list: ${r.models.slice(0, 12).join(', ')}${r.models.length > 12 ? ', …' : ''}`);
-      setResult(out, lines.join('\n'), bad.length ? 'bad' : 'ok');
+      // 503/504 mean Google accepted the key but its servers are overloaded.
+      const busy = !r.ok && bad.every((p) => /\b50[34]\b|UNAVAILABLE|DEADLINE_EXCEEDED|high demand/i.test(p.error || ''));
+      if (busy) lines.unshift('Your key is accepted. Google\'s servers are busy right now, which is temporary. The agent waits and retries on its own, so you can carry on.\n');
+      setResult(out, lines.join('\n'), r.ok || busy ? 'ok' : 'bad');
     } else if (action === 'email') {
       const r = await api('/api/test/email', {});
       const line = (name, x) => `${name}: ${x.ok ? 'works' : `failed. ${x.error}`}`;

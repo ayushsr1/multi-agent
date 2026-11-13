@@ -48,8 +48,8 @@ const schema = z.object({
     .default({}),
   models: z
     .object({
-      fast: modelChain(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash']),
-      smart: modelChain(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash']),
+      fast: modelChain(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']),
+      smart: modelChain(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']),
     })
     .default({}),
   llm: z
