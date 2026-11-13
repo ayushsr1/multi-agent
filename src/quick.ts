@@ -24,7 +24,7 @@ const SKIP_HOSTS = [
 const isSkipHost = (h: string) => /(^|\.)google\.[a-z.]+$/.test(h) || SKIP_HOSTS.some((d) => h === d || h.endsWith('.' + d));
 const sameSite = (a: string, b: string) => a === b || a.endsWith('.' + b) || b.endsWith('.' + a);
 const FREEMAIL = /^(gmail|googlemail|yahoo|ymail|hotmail|outlook|live|rediffmail|aol|icloud|proton|protonmail|zoho)\.[a-z.]+$/i;
-const PROFILE_PATH = /\/(company|companies|supplier|suppliers|seller|sellers|profile|member|members|exhibitor|exhibitors|listing|listings|business|firm|vendor|vendors|manufacturer|manufacturers|exporter|exporters)\b/i;
+const PROFILE_PATH = /\/(company|companies|supplier|suppliers|seller|sellers|profile|profiles|member|members|partner|partners|cluster|clusters|organisation|organisations|organization|organizations|institution|institutions|exhibitor|exhibitors|listing|listings|business|firm|vendor|vendors|manufacturer|manufacturers|exporter|exporters)\b/i;
 const GOOD_LOCAL = /^(info|contact|sales|export|exports|enquiry|enquiries|inquiry|business|office|hello|marketing|admin|ceo|director|md)$/i;
 const AUTO_SUBJECT = /^(auto(matic)?[\s-]?reply|out of (the )?office|ooo\b|autoreply|abwesenheit)/i;
 const AUTO_TEXT = /out of (the )?office|automatic reply|auto-reply|autoreply/i;
@@ -122,6 +122,11 @@ async function runFind(urls: string[], limit: number) {
     }
   }
   let found = 0;
+  const stats = { pages: 0, companyPages: 0, websites: 0, failed: 0, firstError: '' };
+  const fail = (e: unknown) => {
+    stats.failed++;
+    stats.firstError ||= errMsg(e).slice(0, 160);
+  };
   const done = () => found >= limit || find.stop;
   const status = (s: string) => void (find.msg = `${s} Found ${found} of ${limit} so far.`);
 
@@ -137,8 +142,10 @@ async function runFind(urls: string[], limit: number) {
         page = await fetchListing(url);
       } catch (e) {
         log.warn('quick', `could not open ${url}: ${errMsg(e)}`);
+        fail(e);
         break;
       }
+      stats.pages++;
 
       // 1. Emails printed on the list itself (not the directory's own address).
       for (const email of rank(page.emails).filter((e) => !sameSite(e.split('@')[1], dirHost))) {
@@ -153,17 +160,26 @@ async function runFind(urls: string[], limit: number) {
 
       // 2. Company pages inside the directory.
       const here = new URL(url);
-      const profiles = [...new Set(page.links.map((l) => l.href))]
-        .filter((href) => PROFILE_PATH.test(new URL(href).pathname) && href !== here.origin + here.pathname && !visited.has(href))
-        .slice(0, MAX_PROFILES_PER_PAGE);
+      const section = here.pathname.replace(/\/+$/, '');
+      const sameHostLinks = [...new Set(page.links.map((l) => l.href))].filter(
+        (href) => sameSite(hostOf(href), dirHost) && href !== here.origin + here.pathname && !visited.has(href),
+      );
+      let profiles = sameHostLinks.filter((href) => PROFILE_PATH.test(new URL(href).pathname));
+      if (!profiles.length && section) {
+        // Fallback: pages one level below the list, e.g. /partners -> /partners/some-company
+        profiles = sameHostLinks.filter((href) => new URL(href).pathname.startsWith(section + '/'));
+      }
+      profiles = profiles.slice(0, MAX_PROFILES_PER_PAGE);
       for (const [i, href] of profiles.entries()) {
         if (done()) break;
         visited.add(href);
+        stats.companyPages++;
         status(`Reading ${dirHost}, page ${n}, company ${i + 1} of ${profiles.length}.`);
         try {
           if (await fromProfile(href, url, dirHost, seen)) found++;
         } catch (e) {
           log.warn('quick', `${href}: ${errMsg(e)}`);
+          fail(e);
         }
       }
 
@@ -179,11 +195,13 @@ async function runFind(urls: string[], limit: number) {
         const h = hostOf(site);
         if (seen.has(h)) continue;
         seen.add(h);
+        stats.websites++;
         status(`Reading ${dirHost}, page ${n}, website ${i + 1} of ${sites.length}.`);
         try {
           if (await fromSite(site, url)) found++;
         } catch (e) {
           log.warn('quick', `${site}: ${errMsg(e)}`);
+          fail(e);
         }
       }
 
@@ -197,7 +215,7 @@ async function runFind(urls: string[], limit: number) {
       ? `Done. Found ${found} new contacts.`
       : found
         ? `Went through every page. Found ${found} new contacts.`
-        : 'Went through every page but found no new emails. This site may hide emails or block automated visitors. Try a different directory.';
+        : `Found no new emails. Opened ${stats.pages} list page(s), ${stats.companyPages} company page(s) and ${stats.websites} website(s); ${stats.failed} failed${stats.firstError ? ` (first error: ${stats.firstError})` : ''}. The site may hide emails or block automated visitors.`;
   log.info('quick', find.msg);
 }
 
