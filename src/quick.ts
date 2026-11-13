@@ -79,7 +79,9 @@ async function setupAi(): Promise<void> {
   try {
     const cfg = loadConfig();
     initLlm(requireEnv('GEMINI_API_KEY'), cfg.llm.requestsPerMinute);
-    const chains = { fast: [...cfg.models.fast] };
+    // Lite models have far bigger free daily allowances (about 500 a day) than the full Flash models (about 20 a day).
+    const lite = cfg.models.fast.filter((m) => /lite/.test(m));
+    const chains = { fast: [...new Set([...lite, ...cfg.models.fast])] };
     await resolveModels(chains);
     aiModels = chains.fast;
     aiNote = 'AI helper: on.';
