@@ -1,11 +1,15 @@
-// Quick outreach: no AI. Reads directory pages you give it, collects public business emails and phone numbers,
+// Quick outreach: reads directory pages you give it, collects public business emails and phone numbers,
 // sends one fixed email to each (spaced out), and tells you on Telegram whenever someone replies.
+// Gemini (if a key is set) only helps with reading pages: which links are companies, which link is "next",
+// and which email is the best one. Without it, fixed rules do the same job. The email text itself is never AI-written.
+import { z } from 'zod';
 import { dbPath, getState } from './agent.js';
 import { assertPublicUrl, fetchListing, fetchPage, type Page } from './browser.js';
 import { createEmailChannel } from './channels/email.js';
 import { createNotifier } from './channels/notifiers.js';
 import { loadConfig, NeedsSetup, requireEnv, type Config } from './config.js';
 import { isSuppressed, kvGet, kvSet, openDb, suppress, type DB } from './db.js';
+import { askJson, initLlm, resolveModels } from './llm.js';
 import { CONTACT_LINK, FILE_EXT, hasMx, JUNK_DOMAIN, JUNK_LOCAL } from './stages/enrich.js';
 import { newText } from './stages/replies.js';
 import { errMsg, hostOf, log, now, rand, trunc } from './util.js';
@@ -64,11 +68,88 @@ function rank(emails: string[], siteHost?: string): string[] {
 
 const companyName = (title: string, host: string) => title.split(/\s+[|\u2013\u2014:-]\s+/)[0].trim().slice(0, 80) || host;
 
+/* ----------------------------- Gemini helpers ------------------------------ */
+
+let aiModels: string[] | undefined;
+let aiNote = '';
+
+/** Turns the AI helper on if a Gemini key works. Never throws: without it the fixed rules are used. */
+async function setupAi(): Promise<void> {
+  aiModels = undefined;
+  try {
+    const cfg = loadConfig();
+    initLlm(requireEnv('GEMINI_API_KEY'), cfg.llm.requestsPerMinute);
+    const chains = { fast: [...cfg.models.fast] };
+    await resolveModels(chains);
+    aiModels = chains.fast;
+    aiNote = 'AI helper: on.';
+  } catch (e) {
+    aiNote = `AI helper: off (${errMsg(e).slice(0, 120)}), using fixed rules.`;
+  }
+  log.info('quick', aiNote);
+}
+
+const PICK_SYSTEM = 'You read web pages for a sales-research tool. Answer only with the requested JSON.';
+
+/** Asks Gemini which links on a directory page are company entries, and which one is "next page". Returns undefined if unavailable. */
+async function aiReadList(page: Page, dirHost: string): Promise<{ companies: string[]; next?: string } | undefined> {
+  if (!aiModels) return undefined;
+  const seenHref = new Set<string>();
+  const items = page.links
+    .filter((l) => sameSite(hostOf(l.full), dirHost) && !seenHref.has(l.full) && seenHref.add(l.full))
+    .slice(0, 250);
+  if (!items.length) return undefined;
+  const lines = items.map((l, i) => {
+    const u = new URL(l.full);
+    return `${i}. [${l.nav ? 'menu/footer' : 'content'}] "${l.text || '(no text)'}" -> ${u.pathname}${u.search}`;
+  });
+  const prompt = `This is a directory page on ${dirHost}. Page title: ${page.title.slice(0, 100)}
+Below are its links, numbered. Decide:
+(a) company_links: numbers of links that open ONE company / organisation / member / partner profile. Not menus, filters, categories, login, news, events, languages, social media or footer links.
+(b) next_link: the number of the link that goes to the NEXT page of results (pagination), or null if there is none.
+
+<untrusted_links>
+${lines.join('\n')}
+</untrusted_links>
+
+Return JSON: {"company_links": [numbers], "next_link": number or null}`;
+  try {
+    const r = await askJson(
+      prompt,
+      z.object({ company_links: z.array(z.number()).optional(), next_link: z.number().nullish() }),
+      { model: aiModels, system: PICK_SYSTEM, temperature: 0 },
+    );
+    const companies = [...new Set((r.company_links ?? []).filter((i) => Number.isInteger(i) && items[i]).map((i) => items[i].href))];
+    const next = r.next_link != null && items[r.next_link] ? items[r.next_link].full : undefined;
+    return { companies, next };
+  } catch (e) {
+    log.warn('quick', `AI could not read the list page, using fixed rules: ${errMsg(e).slice(0, 200)}`);
+    return undefined;
+  }
+}
+
+/** When a company shows several addresses, asks Gemini which one is the best place to send a business enquiry. */
+async function aiBestFirst(candidates: string[], company: string): Promise<string[]> {
+  if (!aiModels || candidates.length < 2) return candidates;
+  const list = candidates.slice(0, 8);
+  try {
+    const r = await askJson(
+      `Company: ${company || 'unknown'}\nWhich of these email addresses is the best one for sending a first business enquiry to the company? Prefer a general business, sales, export or contact address on the company's own domain. Avoid personal-looking, support-ticket, webmaster, careers or press addresses unless nothing else fits.\n\n<untrusted_emails>\n${list.map((e, i) => `${i}. ${e}`).join('\n')}\n</untrusted_emails>\n\nReturn JSON: {"best": number}`,
+      z.object({ best: z.number() }),
+      { model: aiModels, system: PICK_SYSTEM, temperature: 0 },
+    );
+    const pick = list[r.best];
+    return pick ? [pick, ...candidates.filter((e) => e !== pick)] : candidates;
+  } catch {
+    return candidates;
+  }
+}
+
 /** Saves the first address that is new, not opted out and can receive mail. Skips the company if it was already contacted. */
 async function addContact(candidates: string[], c: { company: string; website: string | null; phone: string; source: string }) {
   const d = qdb();
   if (candidates.some((e) => isSuppressed(d, e) || d.prepare('SELECT 1 FROM leads WHERE email = ?').get(e))) return false;
-  for (const email of candidates) {
+  for (const email of await aiBestFirst(candidates, c.company)) {
     if (!(await hasMx(email.split('@')[1]))) continue;
     d.prepare(
       `INSERT INTO leads (name, company, website, source_url, email, phone, status, created_at, updated_at)
@@ -128,6 +209,7 @@ async function runFind(urls: string[], limit: number) {
     }
   }
   let found = 0;
+  await setupAi();
   const stats = { pages: 0, companyPages: 0, websites: 0, failed: 0, firstError: '', diag: '' };
   const fail = (e: unknown) => {
     stats.failed++;
@@ -182,14 +264,18 @@ async function runFind(urls: string[], limit: number) {
       const groups = new Map<string, string[]>();
       for (const href of pool) groups.set(shapeOf(href), [...(groups.get(shapeOf(href)) ?? []), href]);
       const best = [...groups.values()].sort((a, b) => b.length - a.length)[0] ?? [];
-      const profiles = (best.length >= 3 ? best : []).slice(0, MAX_PROFILES_PER_PAGE);
+      const ruleProfiles = (best.length >= 3 ? best : []).slice(0, MAX_PROFILES_PER_PAGE);
+      status(`Reading ${dirHost}, page ${n}: working out which links are companies.`);
+      const ai = await aiReadList(page, dirHost);
+      const aiCompanies = (ai?.companies ?? []).filter((h) => h !== here.origin + here.pathname && !visited.has(h));
+      const profiles = aiCompanies.length ? aiCompanies.slice(0, MAX_PROFILES_PER_PAGE) : ruleProfiles;
       if (!stats.diag) {
         const top = [...groups.entries()]
           .sort((a, b) => b[1].length - a[1].length)
           .slice(0, 3)
           .map(([k, v]) => `${k} x${v.length}`)
           .join(', ');
-        stats.diag = `First page: title "${page.title.slice(0, 60)}", ${page.text.length} characters of text, ${page.links.length} links (${page.links.filter((l) => !l.nav).length} outside menus), ${page.external.length} outside websites, ${page.emails.length} emails. Most common link patterns: ${top || 'none'}.`;
+        stats.diag = `First page: title "${page.title.slice(0, 60)}", ${page.text.length} characters of text, ${page.links.length} links (${page.links.filter((l) => !l.nav).length} outside menus), ${page.external.length} outside websites, ${page.emails.length} emails. Most common link patterns: ${top || 'none'}. AI picked ${aiCompanies.length} company links${ai?.next ? ' and a next-page link' : ''}.`;
       }
       for (const [i, href] of profiles.entries()) {
         if (done()) break;
@@ -226,7 +312,7 @@ async function runFind(urls: string[], limit: number) {
         }
       }
 
-      let nextUrl = page.next;
+      let nextUrl = ai?.next ?? page.next;
       if (!nextUrl && profiles.length) {
         // No visible "next" button: many directories still accept ?page=1, ?page=2 ...
         const u = new URL(start);
@@ -243,7 +329,7 @@ async function runFind(urls: string[], limit: number) {
       ? `Done. Found ${found} new contacts.`
       : found
         ? `Went through every page. Found ${found} new contacts.`
-        : `Found no new emails. Opened ${stats.pages} list page(s), ${stats.companyPages} company page(s) and ${stats.websites} website(s); ${stats.failed} failed${stats.firstError ? ` (first error: ${stats.firstError})` : ''}. The site may hide emails or block automated visitors. ${stats.diag}`;
+        : `Found no new emails. Opened ${stats.pages} list page(s), ${stats.companyPages} company page(s) and ${stats.websites} website(s); ${stats.failed} failed${stats.firstError ? ` (first error: ${stats.firstError})` : ''}. The site may hide emails or block automated visitors. ${aiNote} ${stats.diag}`;
   log.info('quick', find.msg);
 }
 

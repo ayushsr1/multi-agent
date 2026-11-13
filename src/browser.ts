@@ -6,7 +6,7 @@ export interface Page {
   url: string;
   title: string;
   text: string;
-  links: { href: string; text: string; /** In the menu, header or footer rather than the main content. */ nav: boolean }[];
+  links: { href: string; text: string; /** Same as href but with the ?query part kept (needed for page numbers). */ full: string; /** In the menu, header or footer rather than the main content. */ nav: boolean }[];
   /** Links to other websites (for example company sites listed in a directory). */
   external: string[];
   emails: string[];
@@ -61,7 +61,7 @@ function parse(url: string, html: string): Page {
       const label = ($(el).text().trim() || $(el).attr('aria-label') || $(el).attr('title') || '').trim();
       const nav = $(el).closest(NAV_AREA).length > 0;
       if (u.hostname === base.hostname) {
-        links.push({ href: u.origin + u.pathname, text: label.slice(0, 80), nav });
+        links.push({ href: u.origin + u.pathname, text: label.slice(0, 80), full: u.href, nav });
         const hint = `${label} ${$(el).attr('title') ?? ''}`.trim();
         if (!next && !nextHref && (NEXT_TEXT.test(label) || /^go to next/i.test(hint)) && u.href !== base.href) next = u.href;
       } else if (!nav) {
