@@ -20,11 +20,11 @@ function h(tag, props = {}, ...kids) {
 async function api(path, body) {
   let res;
   try {
-    // Never spin forever: the server answers tests within ~20s, so 60s means the connection is stuck.
-    const opts = { signal: AbortSignal.timeout(60_000) };
+    // Never spin forever: the server answers tests within ~75s, so 90s means the connection is stuck.
+    const opts = { signal: AbortSignal.timeout(90_000) };
     res = await fetch(path, body === undefined ? opts : { ...opts, method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   } catch (e) {
-    throw new Error(e.name === 'TimeoutError' ? 'No answer after 60 seconds. The server may be restarting or blocked from reaching Google. Reload the page and try again.' : `Could not reach the agent: ${e.message}`);
+    throw new Error(e.name === 'TimeoutError' ? 'No answer after 90 seconds. The server may be restarting or blocked from reaching Google. Reload the page and try again.' : `Could not reach the agent: ${e.message}`);
   }
   let data = {};
   try { data = await res.json(); } catch { /* non-JSON error */ }

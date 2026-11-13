@@ -87,13 +87,14 @@ export async function resolveModels(chains: Record<string, string[]>): Promise<v
 }
 
 // The key test must answer within seconds: the SDK otherwise retries 429/5xx up to 5 times with long waits and has no timeout.
-const testClient = (apiKey: string) => new GoogleGenAI({ apiKey, httpOptions: { timeout: 20_000, retryOptions: { attempts: 1 } } });
+// The time limit is enforced locally with abortSignal: httpOptions.timeout also tells Google to stop early, which returns 504 for slow models.
+const testClient = (apiKey: string) => new GoogleGenAI({ apiKey, httpOptions: { retryOptions: { attempts: 1 } } });
 
 /** Lists Gemini model ids this key can use for text generation. Throws if the key is rejected. */
 export async function listUsableModels(apiKey: string): Promise<string[]> {
   const client = testClient(apiKey);
   const out: string[] = [];
-  for await (const m of await client.models.list({ config: { pageSize: 100 } })) {
+  for await (const m of await client.models.list({ config: { pageSize: 100, abortSignal: AbortSignal.timeout(15_000) } })) {
     if (m.name && (m.supportedActions ?? ['generateContent']).includes('generateContent')) {
       out.push(m.name.replace(/^models\//, ''));
     }
@@ -107,7 +108,7 @@ export async function probeModels(apiKey: string, models: string[]): Promise<{ m
   return Promise.all(
     models.map(async (model) => {
       try {
-        await client.models.generateContent({ model, contents: 'Reply with the word ok.' });
+        await client.models.generateContent({ model, contents: 'Reply with the word ok.', config: { abortSignal: AbortSignal.timeout(30_000) } });
         return { model, ok: true };
       } catch (e) {
         return { model, ok: false, error: errMsg(e).slice(0, 300) };
