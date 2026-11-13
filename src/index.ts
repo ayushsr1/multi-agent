@@ -16,9 +16,9 @@ const server = await startUi(port, host).catch((e) => {
 log.info('ui', `Settings and dashboard: ${url}`);
 startQuickLoops();
 
-// Optional auto-start for always-on use (pm2, scheduled task, server): `npm run dry-run` or `npm run live`.
-// AGENT_AUTOSTART=dry|live resumes the agent after a server restart without opening the page.
-const mode = process.argv.includes('--live') ? 'live' : process.argv.includes('--dry-run') ? 'dry' : process.env.AGENT_AUTOSTART;
+// The old AI agent is switched off here: it is not part of Quick outreach and it used up the free Gemini quota.
+// Only an explicit `npm run dry-run` or `npm run live` starts it.
+const mode = process.argv.includes('--live') ? 'live' : process.argv.includes('--dry-run') ? 'dry' : undefined;
 const autostart = mode === 'live' ? false : mode === 'dry' ? true : undefined;
 if (autostart !== undefined) {
   await startAgent(autostart).catch((e) => log.error('agent', errMsg(e)));
