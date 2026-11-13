@@ -20,10 +20,16 @@ const SKIP_HOSTS = [
   'whatsapp.com', 'wa.me', 't.me', 'telegram.org', 'pinterest.com', 'tiktok.com', 'wikipedia.org', 'amazon.com',
   'amazon.in', 'flipkart.com', 'apple.com', 'microsoft.com', 'bit.ly', 'goo.gl', 'tinyurl.com', 'cloudflare.com',
   'wordpress.com', 'wordpress.org', 'wix.com', 'godaddy.com', 'gravatar.com', 'w3.org', 'schema.org', 'github.com',
+  'creativecommons.org', 'europa.eu', 'eur-lex.europa.eu', 'gov.uk', 'mailchimp.com', 'twimg.com',
 ];
 const isSkipHost = (h: string) => /(^|\.)google\.[a-z.]+$/.test(h) || SKIP_HOSTS.some((d) => h === d || h.endsWith('.' + d));
 const sameSite = (a: string, b: string) => a === b || a.endsWith('.' + b) || b.endsWith('.' + a);
 const FREEMAIL = /^(gmail|googlemail|yahoo|ymail|hotmail|outlook|live|rediffmail|aol|icloud|proton|protonmail|zoho)\.[a-z.]+$/i;
+const BORING_PATH = /\/(login|log-in|register|sign-?up|contact|about|privacy|terms|cookies?|search|help|faq|sitemap|user|account|tag|taxonomy|node\/add)(\/|$)/i;
+const shapeOf = (href: string) => {
+  const parts = new URL(href).pathname.split('/').filter(Boolean);
+  return `${parts[0] ?? ''}/${parts.length}`;
+};
 const PROFILE_PATH = /\/(company|companies|supplier|suppliers|seller|sellers|profile|profiles|member|members|partner|partners|cluster|clusters|organisation|organisations|organization|organizations|institution|institutions|exhibitor|exhibitors|listing|listings|business|firm|vendor|vendors|manufacturer|manufacturers|exporter|exporters)\b/i;
 const GOOD_LOCAL = /^(info|contact|sales|export|exports|enquiry|enquiries|inquiry|business|office|hello|marketing|admin|ceo|director|md)$/i;
 const AUTO_SUBJECT = /^(auto(matic)?[\s-]?reply|out of (the )?office|ooo\b|autoreply|abwesenheit)/i;
@@ -160,16 +166,23 @@ async function runFind(urls: string[], limit: number) {
 
       // 2. Company pages inside the directory.
       const here = new URL(url);
-      const section = here.pathname.replace(/\/+$/, '');
-      const sameHostLinks = [...new Set(page.links.map((l) => l.href))].filter(
-        (href) => sameSite(hostOf(href), dirHost) && href !== here.origin + here.pathname && !visited.has(href),
-      );
-      let profiles = sameHostLinks.filter((href) => PROFILE_PATH.test(new URL(href).pathname));
-      if (!profiles.length && section) {
-        // Fallback: pages one level below the list, e.g. /partners -> /partners/some-company
-        profiles = sameHostLinks.filter((href) => new URL(href).pathname.startsWith(section + '/'));
-      }
-      profiles = profiles.slice(0, MAX_PROFILES_PER_PAGE);
+      // Company entries are the links in the main content that share the most common address pattern
+      // (for example many links like /organisation/xyz). Menu, header and footer links are ignored.
+      const candidates = [
+        ...new Set(
+          page.links
+            .filter((l) => !l.nav && l.text.length >= 2)
+            .map((l) => l.href)
+            .filter((href) => sameSite(hostOf(href), dirHost) && href !== here.origin + here.pathname && !visited.has(href))
+            .filter((href) => !BORING_PATH.test(new URL(href).pathname) && new URL(href).pathname !== '/'),
+        ),
+      ];
+      const byName = candidates.filter((href) => PROFILE_PATH.test(new URL(href).pathname));
+      const pool = byName.length >= 3 ? byName : candidates;
+      const groups = new Map<string, string[]>();
+      for (const href of pool) groups.set(shapeOf(href), [...(groups.get(shapeOf(href)) ?? []), href]);
+      const best = [...groups.values()].sort((a, b) => b.length - a.length)[0] ?? [];
+      const profiles = (best.length >= 3 ? best : []).slice(0, MAX_PROFILES_PER_PAGE);
       for (const [i, href] of profiles.entries()) {
         if (done()) break;
         visited.add(href);
@@ -205,7 +218,14 @@ async function runFind(urls: string[], limit: number) {
         }
       }
 
-      url = page.next && !visited.has(page.next) ? page.next : undefined;
+      let nextUrl = page.next;
+      if (!nextUrl && profiles.length) {
+        // No visible "next" button: many directories still accept ?page=1, ?page=2 ...
+        const u = new URL(start);
+        u.searchParams.set('page', String(n));
+        nextUrl = u.href;
+      }
+      url = nextUrl && !visited.has(nextUrl) ? nextUrl : undefined;
     }
   }
 

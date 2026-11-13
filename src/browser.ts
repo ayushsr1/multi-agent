@@ -6,7 +6,7 @@ export interface Page {
   url: string;
   title: string;
   text: string;
-  links: { href: string; text: string }[];
+  links: { href: string; text: string; /** In the menu, header or footer rather than the main content. */ nav: boolean }[];
   /** Links to other websites (for example company sites listed in a directory). */
   external: string[];
   emails: string[];
@@ -19,7 +19,8 @@ const UA = 'Mozilla/5.0 (compatible; OutreachResearchBot/1.0)';
 const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
 // International numbers written with + and Indian 10-digit mobiles.
 const PHONE_RE = /\+\d{1,3}[\s.-]?\(?\d{1,5}\)?(?:[\s.-]?\d{2,5}){2,4}|\b[6-9]\d{4}[\s-]?\d{5}\b/g;
-const NEXT_TEXT = /^(next|next page|next\s*[›»>]+|[›»]|>|>>)$/i;
+const NEXT_TEXT = /^(go to )?(next( page)?\s*[›»>]*|[›»>]+)$/i;
+const NAV_AREA = 'header, nav, footer, aside, [role=navigation], [role=banner], [role=contentinfo], [class*=breadcrumb], [class*=footer], [class*=menu]';
 
 function cleanPhone(raw: string): string | undefined {
   const p = raw.replace(/[^\d+]/g, '');
@@ -51,16 +52,19 @@ function parse(url: string, html: string): Page {
   const external = new Set<string>();
   const base = new URL(url);
   let next: string | undefined;
-  const nextHref = $('link[rel~="next"], a[rel~="next"]').first().attr('href');
+  const nextHref =
+    $('link[rel~="next"], a[rel~="next"], li[class*="pager__item--next"] a, li[class*="pager-next"] a, li.next a, a.next').first().attr('href');
   $('a[href]').each((_, el) => {
     try {
       const u = new URL($(el).attr('href')!, base);
       if (!/^https?:$/.test(u.protocol)) return;
       const label = ($(el).text().trim() || $(el).attr('aria-label') || $(el).attr('title') || '').trim();
+      const nav = $(el).closest(NAV_AREA).length > 0;
       if (u.hostname === base.hostname) {
-        links.push({ href: u.origin + u.pathname, text: label.slice(0, 80) });
-        if (!next && !nextHref && NEXT_TEXT.test(label) && u.href !== base.href) next = u.href;
-      } else {
+        links.push({ href: u.origin + u.pathname, text: label.slice(0, 80), nav });
+        const hint = `${label} ${$(el).attr('title') ?? ''}`.trim();
+        if (!next && !nextHref && (NEXT_TEXT.test(label) || /^go to next/i.test(hint)) && u.href !== base.href) next = u.href;
+      } else if (!nav) {
         external.add(u.origin);
       }
     } catch {
