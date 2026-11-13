@@ -49,6 +49,7 @@ let db: DB | undefined;
 const qdb = () => (db ??= openDb(dbPath(false)));
 
 const find = { running: false, stop: false, msg: '' };
+const why = { noEmail: 0, noWebsite: 0, known: 0, noMx: 0 };
 
 /* --------------------------------- finding --------------------------------- */
 
@@ -150,9 +151,15 @@ async function aiBestFirst(candidates: string[], company: string): Promise<strin
 /** Saves the first address that is new, not opted out and can receive mail. Skips the company if it was already contacted. */
 async function addContact(candidates: string[], c: { company: string; website: string | null; phone: string; source: string }) {
   const d = qdb();
-  if (candidates.some((e) => isSuppressed(d, e) || d.prepare('SELECT 1 FROM leads WHERE email = ?').get(e))) return false;
+  if (candidates.some((e) => isSuppressed(d, e) || d.prepare('SELECT 1 FROM leads WHERE email = ?').get(e))) {
+    why.known++;
+    return false;
+  }
   for (const email of await aiBestFirst(candidates, c.company)) {
-    if (!(await hasMx(email.split('@')[1]))) continue;
+    if (!(await hasMx(email.split('@')[1]))) {
+      why.noMx++;
+      continue;
+    }
     d.prepare(
       `INSERT INTO leads (name, company, website, source_url, email, phone, status, created_at, updated_at)
        VALUES ('', ?, ?, ?, ?, ?, 'q_found', ?, ?)`,
@@ -181,7 +188,13 @@ async function fromSite(origin: string, source: string): Promise<boolean> {
       log.warn('quick', `${u}: ${errMsg(e)}`);
     }
   }
-  return addContact(rank(emails, host), { company: companyName(home.title, host), website: home.url, phone: phones[0] ?? '', source });
+  const ranked = rank(emails, host);
+  if (!ranked.length) {
+    why.noEmail++;
+    log.info('quick', `${host}: no email on the home or contact pages`);
+    return false;
+  }
+  return addContact(ranked, { company: companyName(home.title, host), website: home.url, phone: phones[0] ?? '', source });
 }
 
 /** A company's page inside the directory: use the email shown there, or follow its website link. */
@@ -195,7 +208,13 @@ async function fromProfile(url: string, source: string, dirHost: string, seen: S
   if (emails.length) {
     return addContact(emails, { company: companyName(p.title, dirHost), website: site ?? null, phone: p.phones[0] ?? '', source });
   }
-  if (!site || seen.has(hostOf(site))) return false;
+  if (!site || seen.has(hostOf(site))) {
+    if (!site) {
+      why.noWebsite++;
+      log.info('quick', `${url}: company page shows no email and no website link`);
+    }
+    return false;
+  }
   seen.add(hostOf(site));
   return fromSite(site, source);
 }
@@ -211,6 +230,7 @@ async function runFind(urls: string[], limit: number) {
     }
   }
   let found = 0;
+  Object.assign(why, { noEmail: 0, noWebsite: 0, known: 0, noMx: 0 });
   await setupAi();
   const stats = { pages: 0, companyPages: 0, websites: 0, failed: 0, firstError: '', diag: '' };
   const fail = (e: unknown) => {
@@ -292,8 +312,8 @@ async function runFind(urls: string[], limit: number) {
         }
       }
 
-      // 3. Company websites linked from the list.
-      const sites = page.external
+      // 3. Company websites linked from the list (only when the list has no company pages of its own: otherwise these are mostly ads).
+      const sites = (profiles.length ? [] : page.external)
         .filter((o) => {
           const h = hostOf(o);
           return !isSkipHost(h) && !sameSite(h, dirHost) && !seen.has(h);
@@ -331,7 +351,7 @@ async function runFind(urls: string[], limit: number) {
       ? `Done. Found ${found} new contacts.`
       : found
         ? `Went through every page. Found ${found} new contacts.`
-        : `Found no new emails. Opened ${stats.pages} list page(s), ${stats.companyPages} company page(s) and ${stats.websites} website(s); ${stats.failed} failed${stats.firstError ? ` (first error: ${stats.firstError})` : ''}. The site may hide emails or block automated visitors. ${aiNote} ${stats.diag}`;
+        : `Found no new emails. Opened ${stats.pages} list page(s), ${stats.companyPages} company page(s) and ${stats.websites} website(s); ${stats.failed} failed${stats.firstError ? ` (first error: ${stats.firstError})` : ''}. The site may hide emails or block automated visitors. Why: ${why.noWebsite} company pages had no website link, ${why.noEmail} websites showed no email, ${why.known} were already known or opted out, ${why.noMx} addresses cannot receive mail. ${aiNote} ${stats.diag}`;
   log.info('quick', find.msg);
 }
 
