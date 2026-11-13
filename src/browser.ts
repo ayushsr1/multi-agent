@@ -20,7 +20,7 @@ const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
 // International numbers written with + and Indian 10-digit mobiles.
 const PHONE_RE = /\+\d{1,3}[\s.-]?\(?\d{1,5}\)?(?:[\s.-]?\d{2,5}){2,4}|\b[6-9]\d{4}[\s-]?\d{5}\b/g;
 const NEXT_TEXT = /^(go to )?(next( page)?\s*[›»>]*|[›»>]+)$/i;
-const NAV_AREA = 'header, nav, footer, aside, [role=navigation], [role=banner], [role=contentinfo], [class*=breadcrumb], [class*=footer], [class*=menu]';
+const NAV_AREA = 'header, nav, footer, [role=navigation], [role=banner], [role=contentinfo], [class*=breadcrumb]';
 
 function cleanPhone(raw: string): string | undefined {
   const p = raw.replace(/[^\d+]/g, '');

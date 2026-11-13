@@ -128,7 +128,7 @@ async function runFind(urls: string[], limit: number) {
     }
   }
   let found = 0;
-  const stats = { pages: 0, companyPages: 0, websites: 0, failed: 0, firstError: '' };
+  const stats = { pages: 0, companyPages: 0, websites: 0, failed: 0, firstError: '', diag: '' };
   const fail = (e: unknown) => {
     stats.failed++;
     stats.firstError ||= errMsg(e).slice(0, 160);
@@ -183,6 +183,14 @@ async function runFind(urls: string[], limit: number) {
       for (const href of pool) groups.set(shapeOf(href), [...(groups.get(shapeOf(href)) ?? []), href]);
       const best = [...groups.values()].sort((a, b) => b.length - a.length)[0] ?? [];
       const profiles = (best.length >= 3 ? best : []).slice(0, MAX_PROFILES_PER_PAGE);
+      if (!stats.diag) {
+        const top = [...groups.entries()]
+          .sort((a, b) => b[1].length - a[1].length)
+          .slice(0, 3)
+          .map(([k, v]) => `${k} x${v.length}`)
+          .join(', ');
+        stats.diag = `First page: title "${page.title.slice(0, 60)}", ${page.text.length} characters of text, ${page.links.length} links (${page.links.filter((l) => !l.nav).length} outside menus), ${page.external.length} outside websites, ${page.emails.length} emails. Most common link patterns: ${top || 'none'}.`;
+      }
       for (const [i, href] of profiles.entries()) {
         if (done()) break;
         visited.add(href);
@@ -235,7 +243,7 @@ async function runFind(urls: string[], limit: number) {
       ? `Done. Found ${found} new contacts.`
       : found
         ? `Went through every page. Found ${found} new contacts.`
-        : `Found no new emails. Opened ${stats.pages} list page(s), ${stats.companyPages} company page(s) and ${stats.websites} website(s); ${stats.failed} failed${stats.firstError ? ` (first error: ${stats.firstError})` : ''}. The site may hide emails or block automated visitors.`;
+        : `Found no new emails. Opened ${stats.pages} list page(s), ${stats.companyPages} company page(s) and ${stats.websites} website(s); ${stats.failed} failed${stats.firstError ? ` (first error: ${stats.firstError})` : ''}. The site may hide emails or block automated visitors. ${stats.diag}`;
   log.info('quick', find.msg);
 }
 
